@@ -1,0 +1,10 @@
+Package: zabbix-universal-monitor
+Version: 4.1.0
+Section: admin
+Priority: optional
+Architecture: all
+Depends: bash, curl, python3, python3-pip
+Maintainer: Andrei Sanakin <sanakinandrej4@gmail.com>
+Description: Universal Monitoring Stack
+ Zabbix + Prometheus + Grafana + Alertmanager + MAX webhook.
+ Server-side meta-package; configs live in /opt/monitoring.

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run branch scanner every 30 minutes
+Requires=scanner-branches.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+
+[Install]
+WantedBy=timers.target

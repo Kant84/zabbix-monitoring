@@ -1,0 +1,15 @@
+[Unit]
+Description=MAX Messenger Webhook Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/default/max-webhook-server
+ExecStart=/usr/bin/python3 /opt/monitoring/webhook/max-webhook-server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

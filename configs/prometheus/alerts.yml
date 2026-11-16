@@ -1,0 +1,53 @@
+groups:
+  - name: server_alerts
+    interval: 15s
+    rules:
+      # ☠️ ЧЕРЕП — сервер недоступен
+      - alert: ServerDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          alertgroup: server
+        annotations:
+          summary: "☠️ Сервер {{ $labels.instance }} недоступен"
+          description: "Нет метрик от {{ $labels.instance }} ({{ $labels.location_type }}) более 2 минут"
+          value: "0"
+          threshold: "1"
+
+      # ⚠️ ЖЁЛТЫЙ ! — CPU > 85%
+      - alert: HighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+          alertgroup: cpu
+        annotations:
+          summary: "⚠️ CPU > 85% на {{ $labels.instance }}"
+          description: "Загрузка CPU {{ $value }}%"
+          value: "{{ $value }}"
+          threshold: "85"
+
+      # ⚠️ ЖЁЛТЫЙ ! — RAM > 90%
+      - alert: HighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: high
+          alertgroup: memory
+        annotations:
+          summary: "⚠️ RAM > 90% на {{ $labels.instance }}"
+          value: "{{ $value }}"
+          threshold: "90"
+
+      # ⚠️ ЖЁЛТЫЙ ! — Disk / > 90%
+      - alert: DiskFull
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          alertgroup: disk
+        annotations:
+          summary: "⚠️ Диск / > 90% на {{ $labels.instance }}"
+          value: "{{ $value }}"
+          threshold: "90"

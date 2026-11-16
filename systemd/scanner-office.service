@@ -1,0 +1,8 @@
+[Unit]
+Description=Zabbix/Prometheus Office Scanner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/monitoring/scripts/scanner-office.sh

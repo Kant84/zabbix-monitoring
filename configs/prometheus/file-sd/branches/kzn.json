@@ -1,0 +1,15 @@
+[
+  {
+    "targets": [
+      "10.200.3.11:9100",
+      "10.200.3.12:9100",
+      "10.200.3.13:9100"
+    ],
+    "labels": {
+      "city": "kzn",
+      "region": "volga",
+      "env": "production",
+      "group": "branch-kzn"
+    }
+  }
+]

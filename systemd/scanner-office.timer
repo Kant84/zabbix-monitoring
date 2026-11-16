@@ -1,0 +1,10 @@
+[Unit]
+Description=Run office scanner every 10 minutes
+Requires=scanner-office.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

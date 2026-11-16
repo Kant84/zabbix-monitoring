@@ -1,0 +1,10 @@
+[
+  {
+    "targets": [],
+    "labels": {
+      "location_type": "office",
+      "env": "office",
+      "network": "OFFICE_SUBNET_PLACEHOLDER"
+    }
+  }
+]

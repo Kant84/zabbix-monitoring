@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'universal-monitor'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['localhost:9093']
+
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+scrape_configs:
+  # Prometheus сам себя
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ВСЕ хосты: филиалы + офис. Сканеры обновляют JSON-файлы.
+  # Хардкод IP НЕ требуется — новые хосты подхватываются за 30 сек.
+  - job_name: 'node'
+    scrape_interval: 15s
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/file-sd/branches/*.json'
+          - '/etc/prometheus/file-sd/office/*.json'
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: instance
+        replacement: '${1}'
+      - source_labels: [__meta_filepath]
+        regex: '.*/branches/.*'
+        target_label: location_type
+        replacement: 'branch'
+      - source_labels: [__meta_filepath]
+        regex: '.*/office/.*'
+        target_label: location_type
+        replacement: 'office'

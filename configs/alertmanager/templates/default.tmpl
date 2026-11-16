@@ -1,0 +1,14 @@
+{{ define "custom.subject" }}
+[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}
+{{ end }}
+
+{{ define "custom.html" }}
+<h2>{{ .GroupLabels.alertname }}</h2>
+<p>Status: {{ .Status }}</p>
+{{ range .Alerts }}
+<hr/>
+<p><b>Instance:</b> {{ .Labels.instance }}</p>
+<p><b>Severity:</b> {{ .Labels.severity }}</p>
+<p><b>Description:</b> {{ .Annotations.description }}</p>
+{{ end }}
+{{ end }}

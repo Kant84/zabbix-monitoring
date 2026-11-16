@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+chmod +x /opt/monitoring/scripts/*.sh
+chmod +x /opt/monitoring/webhook/max-webhook-server.py
+exit 0
