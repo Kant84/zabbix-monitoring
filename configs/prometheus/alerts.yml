@@ -67,11 +67,7 @@ groups:
           summary: "BliKVM {{ $labels.instance }} мало памяти"
           description: "Доступно менее 250 МБ RAM"
 
-      - alert: BliKvmStorageLow
-        expr: blikvm_storage_available_bytes < 104857600
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "BliKVM {{ $labels.instance }} storage <100MB (значение {{ $value }})"
-          description: "Возможен баг метрики прошивки (отдаёт 0) — проверить в веб-морде: System"
+      # BliKvmStorageLow УДАЛЁН в v4.2.1: корневой раздел BliKVM (116 МБ) —
+      # это образ системы, он штатно заполнен на 100% (storage_available = 0 — норма).
+      # Пользовательские данные живут на /data (проверено: 26 ГБ свободно) и
+      # отдельной метрикой не сдаются.

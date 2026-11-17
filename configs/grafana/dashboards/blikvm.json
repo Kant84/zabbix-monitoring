@@ -145,45 +145,6 @@
    }
   },
   {
-   "id": 4,
-   "type": "timeseries",
-   "title": "Доступно хранилища (⚠ сейчас 0!)",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prometheus"
-   },
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 0,
-    "y": 14
-   },
-   "targets": [
-    {
-     "expr": "blikvm_storage_available_bytes",
-     "refId": "A",
-     "legendFormat": "{{instance}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "bytes"
-    },
-    "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   }
-  },
-  {
    "id": 5,
    "type": "timeseries",
    "title": "Загрузка CPU (load1)",

@@ -174,12 +174,12 @@ sudo systemctl reload prometheus
 ```bash
 curl -s "localhost:9090/api/v1/query?query=blikvm_temperature_c" | python3 -c "import json,sys; [print(r['metric'].get('instance'), r['value'][1]) for r in json.load(sys.stdin)['data']['result']]"
 ```
-Алерты: **BliKvmDown / BliKvmHighTemp (>60°C) / BliKvmLowMem / BliKvmStorageLow (<100МБ)**.
+Алерты: **BliKvmDown / BliKvmHighTemp (>60°C) / BliKvmLowMem**.
 
-> ⚠ Известная особенность прошивки: `blikvm_storage_available_bytes` может
-> отдавать 0 при исправном диске — тогда алерт BliKvmStorageLow ложный;
-> проверьте реальную заполненность в веб-морде (System) и при баге поднимите
-> порог или удалите правило.
+> ⚠ `blikvm_storage_available_bytes` всегда 0 — и это НЕ баг: корневой раздел
+> BliKVM (116 МБ) — это образ системы, он штатно заполнен на 100%. Пользовательские
+> данные живут на разделе `/data` (проверено: 26 ГБ свободно) и отдельной метрикой
+> не сдаются. Алерта на storage нет (убран в v4.2.1 — был бы вечным ложным).
 
 ---
 
