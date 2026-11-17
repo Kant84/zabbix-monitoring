@@ -1,53 +1,77 @@
 groups:
   - name: server_alerts
-    interval: 15s
     rules:
-      # ☠️ ЧЕРЕП — сервер недоступен
       - alert: ServerDown
         expr: up{job="node"} == 0
         for: 2m
         labels:
           severity: critical
-          alertgroup: server
         annotations:
-          summary: "☠️ Сервер {{ $labels.instance }} недоступен"
-          description: "Нет метрик от {{ $labels.instance }} ({{ $labels.location_type }}) более 2 минут"
-          value: "0"
-          threshold: "1"
+          summary: "Сервер {{ $labels.instance }} недоступен"
+          description: "Нет метрик node_exporter более 2 минут (location: {{ $labels.location_type }})"
 
-      # ⚠️ ЖЁЛТЫЙ ! — CPU > 85%
       - alert: HighCPU
         expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая загрузка CPU на {{ $labels.instance }}"
+          description: "Загрузка CPU выше 85% более 15 минут"
+
+      - alert: HighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокое потребление RAM на {{ $labels.instance }}"
+          description: "Использовано более 90% RAM более 10 минут"
+
+      - alert: DiskFull
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}) * 100 > 85
+        for: 15m
+        labels:
+          severity: high
+        annotations:
+          summary: "Заполнение диска на {{ $labels.instance }}"
+          description: "Корневой раздел заполнен более чем на 85%"
+
+  # === BliKVM (добавлено v4.2) ===
+  - name: blikvm
+    rules:
+      - alert: BliKvmDown
+        expr: up{job=~"blikvm.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BliKVM {{ $labels.instance }} недоступен"
+          description: "Не снимаются метрики BliKVM более 2 минут"
+
+      - alert: BliKvmHighTemp
+        expr: blikvm_temperature_c > 60
         for: 5m
         labels:
           severity: warning
-          alertgroup: cpu
         annotations:
-          summary: "⚠️ CPU > 85% на {{ $labels.instance }}"
-          description: "Загрузка CPU {{ $value }}%"
-          value: "{{ $value }}"
-          threshold: "85"
+          summary: "BliKVM {{ $labels.instance }} перегрев {{ $value }}°C"
+          description: "Температура устройства выше 60°C более 5 минут"
 
-      # ⚠️ ЖЁЛТЫЙ ! — RAM > 90%
-      - alert: HighMemory
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+      - alert: BliKvmLowMem
+        expr: blikvm_mem_available_bytes < 262144000
         for: 5m
         labels:
-          severity: high
-          alertgroup: memory
+          severity: warning
         annotations:
-          summary: "⚠️ RAM > 90% на {{ $labels.instance }}"
-          value: "{{ $value }}"
-          threshold: "90"
+          summary: "BliKVM {{ $labels.instance }} мало памяти"
+          description: "Доступно менее 250 МБ RAM"
 
-      # ⚠️ ЖЁЛТЫЙ ! — Disk / > 90%
-      - alert: DiskFull
-        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 90
+      - alert: BliKvmStorageLow
+        expr: blikvm_storage_available_bytes < 104857600
         for: 5m
         labels:
           severity: critical
-          alertgroup: disk
         annotations:
-          summary: "⚠️ Диск / > 90% на {{ $labels.instance }}"
-          value: "{{ $value }}"
-          threshold: "90"
+          summary: "BliKVM {{ $labels.instance }} storage <100MB (значение {{ $value }})"
+          description: "Возможен баг метрики прошивки (отдаёт 0) — проверить в веб-морде: System"

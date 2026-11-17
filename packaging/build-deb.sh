@@ -1,7 +1,7 @@
 #!/bin/bash
 # Сборка .deb пакета из репозитория
 set -e
-VERSION="${1:-4.1.0}"
+VERSION="${1:-4.2.0}"
 PKG_NAME="zabbix-universal-monitor"
 BUILD_DIR="/tmp/${PKG_NAME}-build"
 

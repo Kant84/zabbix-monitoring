@@ -13,13 +13,47 @@ rule_files:
   - '/etc/prometheus/alerts.yml'
 
 scrape_configs:
+
+  # === BliKVM (KVM-over-IP, .42 и .44) ===
+  # Метрики: /api/v1/prometheus/metrics. Доступ — Bearer API-токен
+  # (веб-морда BliKVM → Управление аккаунтом → Мои токены API,
+  #  обязательно scope «Мониторинг»; токен без scope → HTTP 403).
+  # Токены на устройствах РАЗНЫЕ, а Prometheus запрещает два scrape_config
+  # с одинаковым job_name — поэтому два отдельных job'а. Алерты ловят оба
+  # через matcher job=~"blikvm.*".
+  # ⚠ НЕ выносите таргеты BliKVM в file-sd/office — job 'node' (glob office/*.json)
+  #   продублирует их http-скрейпом (400 Bad Request, «призраки» в targets API).
+  - job_name: "blikvm-42"
+    scheme: https
+    metrics_path: "/api/v1/prometheus/metrics"
+    authorization:
+      type: Bearer
+      credentials: "YOUR_BLIKVM_TOKEN_42"
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['192.168.88.42:443']
+        labels: {kvm: "blikvm-42"}
+
+  - job_name: "blikvm-44"
+    scheme: https
+    metrics_path: "/api/v1/prometheus/metrics"
+    authorization:
+      type: Bearer
+      credentials: "YOUR_BLIKVM_TOKEN_44"
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['192.168.88.44:443']
+        labels: {kvm: "blikvm-44"}
+
   # Prometheus сам себя
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # ВСЕ хосты: филиалы + офис. Сканеры обновляют JSON-файлы.
-  # Хардкод IP НЕ требуется — новые хосты подхватываются за 30 сек.
+  # ВСЕ Linux-хосты: офис + филиалы. Таргеты пишут сканеры (file_sd).
+  # ⚠ Хардкод IP НЕ нужен — новые хосты подхватываются за 30 сек.
   - job_name: 'node'
     scrape_interval: 15s
     file_sd_configs:
@@ -28,6 +62,7 @@ scrape_configs:
           - '/etc/prometheus/file-sd/office/*.json'
         refresh_interval: 30s
     relabel_configs:
+      # instance без порта (192.168.88.36 вместо 192.168.88.36:9100)
       - source_labels: [__address__]
         regex: '([^:]+):.*'
         target_label: instance

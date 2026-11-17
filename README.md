@@ -1,333 +1,269 @@
-# Universal Monitoring Stack v4.1
+# Universal Monitoring Stack v4.2
 
-Полный стек мониторинга инфраструктуры: **Zabbix + Prometheus + Alertmanager + Grafana + MAX Messenger**.
+Мониторинг инфраструктуры офиса и филиалов: **Zabbix 7.0 + MySQL + Prometheus +
+Alertmanager + Grafana + webhook-оповещения в MAX**. Обнаружение хостов сканерами
+сети (без хардкода IP), дашборд «All Servers» (Linux-хосты + BliKVM), алерты
+☠️/⚠️ в мессенджер и на почту.
 
-Сервер работает на Ubuntu/Debian. Агенты — Linux (Ubuntu 22.04–24.04, Debian 11–13) и Windows 10–11.
-**Никаких зашитых IP в коде:** Prometheus получает цели через `file_sd` (JSON-файлы),
-которые автоматически обновляют сканеры (филиалы + офисный LAN).
+> v4.2 (17.11.2026) — battle-tested: все найденные «в бою» баги v4.1 исправлены,
+> добавлен мониторинг BliKVM, двусторонний установщик агентов, развёрнутый README.
 
 ---
 
 ## 1. Архитектура
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                    server-01 (ЦЕНТРАЛЬНЫЙ СЕРВЕР)                        │
-│                                                                          │
-│  Zabbix Server :10051  │  Prometheus :9090  │  Alertmanager :9093       │
-│  Grafana :3000         │  MAX Webhook :5000 │  Node Exporter :9100      │
-│                                                                          │
-│  Сканеры (systemd timers):                                              │
-│    scanner-branches.timer  — каждые 30 мин (филиалы РФ)                  │
-│    scanner-office.timer    — каждые 10 мин (офисный LAN)                │
-│                                                                          │
-│  Prometheus targets ← /etc/prometheus/file-sd/**/*.json (обновляются   │
-│  сканерами автоматически, refresh_interval 30s)                          │
-└──────────────┬───────────────────────────────────────────┬───────────────┘
-               │                                          │
-     ┌─────────▼──────────┐                    ┌──────────▼─────────┐
-     │  ФИЛИАЛЫ ПО РФ     │                    │  ОФИС (LAN)         │
-     │  Любое количество, │                    │  Все машины         │
-     │  задаются конфигом │                    │  сканируются по ARP │
-     │  /etc/zabbix-      │                    │  + ping + SSH       │
-     │  monitor/branches  │                    │                     │
-     │  .conf             │                    │                     │
-     └────────────────────┘                    └─────────────────────┘
-               │                                          │
-               └──────────────┬───────────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │  MAX Messenger     │
-                    └───────────────────┘
+                    ┌────────────────────── СЕРВЕР МОНИТОРИНГА ──────────────────────┐
+                    │  monitor (192.168.88.36):                                       │
+                    │                                                               │
+ жильцы офиса  ───► │  scanner-office.timer ──► file-sd/office/lan.json ──┐         │
+ (ping+порт 9100)   │  scanner-branches.timer ─► file-sd/branches/*.json ──┼──► Prometheus ──► Alertmanager ──► MAX webhook ──► MAX
+                    │                                                       │     (job node, blikvm-42/44)      (alerts.yml)
+ Linux-хосты       │  zabbix-agent2 (10051) ──► Zabbix Server ──► MySQL    │            │
+ (офис+филиалы)     │  Grafana :3000 ◄── provisioning (datasources, dashboards)         │
+                    │  node_exporter (:9100) на каждом Linux-хосте ◄───────────────────┘
+                    └───────────────────────────────────────────────────────────────
+ BliKVM .42/.44 ────► /api/v1/prometheus/metrics (Bearer API-токен) ──► job blikvm-42/44
 ```
 
-### Принцип работы
-
-| Шаг | Что происходит |
-|-----|----------------|
-| 1 | Prometheus стартует и читает `file-sd/branches/*.json` + `file-sd/office/*.json` |
-| 2 | Каждые 30 мин `scanner-branches.timer` пингует подсети филиалов → находит `:9100` (node_exporter) → обновляет JSON → регистрирует хост в Zabbix через API |
-| 3 | Каждые 10 мин `scanner-office.timer` сканирует офис (ARP + ping + порты 9100/10050) → обновляет `office/lan.json` |
-| 4 | Новые хосты появляются в Prometheus и Grafana **автоматически** через 30 сек |
-| 5 | Alertmanager получает алерты → Webhook-сервер → MAX Messenger + Email |
-
-### Цветовая схема алертов
-
-| Индикатор | Значение |
-|-----------|----------|
-| ☠️ Череп | Сервер недоступен (Disaster) |
-| ⚠️ Жёлтый `!` | Критические данные: CPU > 85%, RAM > 90%, Disk > 90% |
-| 🟢 | Всё в норме |
+- **Новый Linux-хост** в офисе: поставил агент → сканер сам нашёл за ≤10 мин → в Grafana.
+- **Новый филиал**: одна строка в `branches.conf` → сканер обходит подсеть.
+- **Новый BliKVM**: токен в `prometheus.yml` → метрики и алерты.
 
 ---
 
-## 2. Структура проекта
+## 2. Требования
 
-```
-zabbix-monitoring-project/
-├── .gitignore
-├── README.md                      ← этот файл
-├── configs/
-│   ├── zabbix/
-│   │   ├── zabbix_server.conf
-│   │   └── zabbix_agent2.conf
-│   ├── prometheus/
-│   │   ├── prometheus.yml         ← file_sd, БЕЗ хардкода IP
-│   │   ├── alerts.yml             ← правила (ServerDown, HighCPU, HighMemory, DiskFull)
-│   │   └── file-sd/
-│   │       ├── branches/          ← msk.json spb.json kzn.json nsk.json (примеры)
-│   │       └── office/lan.json    ← автозаполняется сканером
-│   ├── alertmanager/
-│   │   ├── alertmanager.yml
-│   │   └── templates/default.tmpl
-│   └── grafana/
-│       ├── provisioning/          ← datasource и dashboard provider
-│       └── dashboards/
-│           └── all-servers.json   ← универсальный дашборд (переменная $server)
-├── webhook/
-│   ├── max-webhook-server.py      ← приём Alertmanager webhook → MAX API
-│   ├── requirements.txt
-│   └── max-webhook-server.service
-├── scripts/
-│   ├── install-server.sh          ← полная установка на центральный сервер
-│   ├── install-agent.sh           ← агент на Linux (Ubuntu/Debian автоопределение)
-│   ├── install-office-agent.ps1   ← агент на Windows 10/11
-│   ├── scanner-branches.sh        ← сканер филиалов
-│   ├── scanner-office.sh          ← сканер офисного LAN
-│   ├── import-hosts.sh            ← разовая регистрация хостов в Zabbix
-│   └── test-all.sh                ← проверка всех компонентов
-├── systemd/
-│   ├── scanner-branches.service / .timer
-│   └── scanner-office.service / .timer
-├── packaging/
-│   ├── DEBIAN/                    ← control + postinst
-│   └── build-deb.sh               ← сборка .deb
-└── docs/
-    ├── INSTALL.md
-    └── API-REFERENCE.md
-```
+| | |
+|---|---|
+| Сервер | Ubuntu 22.04/24.04, 4+ ГБ RAM, 20+ ГБ диск, статический IP в офисном LAN |
+| Сеть | Сервер ДОЛЖЕН быть внутри мониторимого LAN (агенты/SNMP ходят локально) |
+| Доступ | root (sudo) на сервере; SSH с sudo на хосты-агенты (для push-режима) |
+| MAX | бот и chat_id (получение — ниже) |
 
 ---
 
-## 3. Требования
+## 3. Установка сервера (из Git)
 
-### Центральный сервер (server-01)
-
-| Параметр | Минимум | Рекомендуется |
-|----------|---------|---------------|
-| ОС | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS |
-| CPU | 2 ядра | 4 ядра |
-| RAM | 4 GB | 8 GB |
-| Диск | 40 GB | 100 GB SSD |
-| Сеть | 1 Gbps | 1 Gbps |
-
-### Агенты
-
-| ОС | Компоненты |
-|----|-----------|
-| Ubuntu 22.04 / 24.04 | Zabbix Agent2 + Node Exporter |
-| Debian 11 / 12 / 13 | Zabbix Agent2 + Node Exporter |
-| Windows 10 / 11 | Zabbix Agent2 (MSI) + windows_exporter |
-
----
-
-## 4. Установка из Git
-
-### Шаг 4.1 — Залить проект на GitHub (один раз, с рабочей машины Windows)
-
-В PowerShell:
-
-```powershell
-# 1. Распакуйте архив проекта, зайдите в папку
-cd E:\zabbix-monitoring-project
-
-# 2. Инициализация репозитория
-git init
-git add .
-git commit -m "Monitoring stack v4.1: initial structure"
-
-# 3. Создайте ПУСТОЙ репозиторий на github.com (без README!) и привяжите
-git remote add origin https://github.com/<ваш-аккаунт>/zabbix-monitoring-project.git
-git branch -M main
-git push -u origin main
-```
-
-> Маркер успеха: на GitHub видны все файлы и папки, в том числе `configs/prometheus/file-sd/`.
-
-### Шаг 4.2 — Установка на центральный сервер
-
-На server-01 (под root):
+### Шаг 3.1 — клонирование
 
 ```bash
-# 1. Клонируем репозиторий
-apt update && apt install -y git
-git clone https://github.com/<ваш-аккаунт>/zabbix-monitoring-project.git /opt/monitoring
-
-# 2. Права на скрипты
-cd /opt/monitoring
-chmod +x scripts/*.sh
-
-# 3. Запуск полной установки (Zabbix + MySQL + Prometheus + Alertmanager + Grafana + Webhook)
-./scripts/install-server.sh
+sudo apt update && sudo apt install -y git
+sudo git clone https://github.com/Kant84/zabbix-monitoring.git /opt/monitoring
+sudo chown -R $USER:$USER /opt/monitoring
+cd /opt/monitoring && chmod +x scripts/*.sh
 ```
 
-> Маркер успеха — вывод скрипта в конце:
-> ```
-> Zabbix:    http://<IP>/zabbix
-> Grafana:   http://<IP>:3000
-> Prometheus:http://<IP>:9090
-> ```
+**Ожидаемый вывод:**
+```
+Cloning into '/opt/monitoring'...
+remote: Enumerating objects: ...
+Receiving objects: 100% ...
+```
+`ls /opt/monitoring` → `configs  docs  packaging  README.md  scripts  systemd  webhook`
 
-### Шаг 4.3 — Настройка MAX Messenger
+### Шаг 3.2 — установка стека
 
 ```bash
-# 1. Отредактируйте конфиг, вставьте токен бота и chat_id
-nano /etc/default/max-webhook-server
-
-# 2. Перезапуск webhook-сервера
-systemctl restart max-webhook-server
-
-# 3. Тестовое сообщение в MAX
-curl http://localhost:5000/test
+sudo ./scripts/install-server.sh
 ```
 
-> Маркер успеха: в MAX пришло тестовое оповещение `TestAlert`.
+**Что делает (по секциям вывода):**
+1. **Репозиторий Zabbix** — качает `zabbix-release_latest+ubuntu22.04_all.deb`
+   (имя из ID+VERSION_ID ОС, а не кодовое «jammy»; путь без `/release/`).
+   Ожидается: `... saved [8368/8368]`.
+2. **Пакеты** — apt ставит MySQL, Zabbix server/frontend/agent2, Prometheus,
+   Alertmanager, node-exporter, python3-flask. 5–10 минут.
+   Ожидается: `0 upgraded, N newly installed ...` без красных `E:`.
+3. **MySQL** — создаёт БД `zabbix`, пользователя, **ищет файл схемы через
+   `dpkg -L`** (путь отличается между версиями!), включает
+   `log_bin_trust_function_creators` (иначе MySQL 8 ругается ERROR 1419 на
+   создание функций схемы) и импортирует схему **один раз**
+   (повторный запуск видит таблицы и пропускает).
+   Ожидается: `Импорт схемы из /usr/share/zabbix-sql-scripts/mysql/server.sql.gz ...`
+   затем `Схема импортирована.`
+4. **Prometheus/Alertmanager** — конфиги из репо, каталоги file-sd.
+5. **Grafana** — сначала пробует apt-репозиторий; если `apt.grafana.com` отдаёт
+   403 (региональная блокировка CDN) — автоматически качает `.deb` с
+   `dl.grafana.com` и добирает зависимость `musl` через `apt-get install -f`.
+   Затем ставит плагин Zabbix (сам ищет CLI: `grafana-cli` или `grafana cli`).
+   ⚠ В provisioning datasource Prometheus имеет **`uid: prometheus`** —
+   без него все дашборды покажут «No data».
+6. **MAX webhook** — сервис на :5000; конфиг-заглушка `/etc/default/max-webhook-server`
+   **не перезаписывается**, если уже существует.
+7. **Сканеры** — таймеры systemd; `branches.conf`/`office.conf` не затираются.
+8. **Итог** — сводка URL:
+```
+=== ВСЁ УСТАНОВЛЕНО ===
+Zabbix:       http://192.168.88.36/zabbix
+Grafana:      http://192.168.88.36:3000
+Prometheus:   http://192.168.88.36:9090
+Alertmanager: http://192.168.88.36:9093
+```
 
-### Шаг 4.4 — Настройка филиалов
+### Шаг 3.3 — мастер Zabbix (в браузере)
 
-Подсети филиалов задаются в конфиге, **не в коде**:
+Откройте `http://<IP>/zabbix`:
 
+| Поле | Значение |
+|---|---|
+| Тип БД | MySQL |
+| Хост БД | `localhost` |
+| Порт | `0` |
+| Имя БД | `zabbix` |
+| Пользователь | `zabbix` |
+| **Пароль** | `zabbix_password_change_me` (или ваш `DB_PASSWORD`) |
+| TLS | не трогать |
+
+Далее: имя сервера `monitor`, часовой пояс `Europe/Moscow` → «Установить» →
+вход **Admin / zabbix** (пароль смените: User settings → Change password).
+
+⚠ **Частая ошибка** «Доступ запрещен (пароль: ДА)» — опечатка в пароле.
+Проверка с сервера:
 ```bash
-# 1. Создайте конфиг с реальными подсетями
-mkdir -p /etc/zabbix-monitor
-cat > /etc/zabbix-monitor/branches.conf <<'EOF'
-# Формат: <city> <подсеть-без-последнего-октета> <region>
-# Пример ниже — замените на реальные подсети!
-msk 10.200.1 moscow
-spb 10.200.2 northwest
-kzn 10.200.3 volga
-nsk 10.200.4 siberia
-EOF
-
-# 2. Первый запуск сканера вручную
-/opt/monitoring/scripts/scanner-branches.sh
-
-# 3. Проверка — targets должны появиться
-cat /etc/prometheus/file-sd/branches/*.json
+mysql -uzabbix -pzabbix_password_change_me zabbix -e "select 1" && echo AUTH_OK
 ```
 
-> Маркер успеха: в `branches/*.json` появились живые `targets`, в Prometheus (Status → Targets) все `UP`.
+### Шаг 3.4 — токен MAX и тест оповещений
 
-### Шаг 4.5 — Офисный LAN
-
+1. Создайте бота в MAX (Bot Platform), напишите ему любое сообщение с телефона.
+2. Получите chat_id:
 ```bash
-# Подсеть офиса (по умолчанию 10.100.0, переопределяется переменной)
-echo 'OFFICE_SUBNET=192.168.1' > /etc/zabbix-monitor/office.conf   # пример
-
-/opt/monitoring/scripts/scanner-office.sh
-cat /etc/prometheus/file-sd/office/lan.json
+curl -s -H "Authorization: <ТОКЕН_БОТА>" "https://platform-api.max.ru/updates?limit=5"
 ```
-
-### Шаг 4.6 — Windows-машины офиса
-
-На каждой Windows 10/11 машине в PowerShell **от администратора**:
-
-```powershell
-# Скачать скрипт из репозитория или скопировать
-.\install-office-agent.ps1 -ZabbixServer "192.168.1.10"   # IP центрального сервера
-```
-
-Скрипт установит Zabbix Agent2 и windows_exporter, откроет порт 10050 в брандмауэре.
-
-### Шаг 4.7 — Регистрация хостов в Zabbix (разово, для уже известных машин)
-
+В JSON ищите `"chat_id": <число>`.
+3. Впишите значения:
 ```bash
-./scripts/import-hosts.sh
+sudo nano /etc/default/max-webhook-server
+# MAX_BOT_TOKEN=...   MAX_CHAT_ID=...
+sudo systemctl restart max-webhook-server
 ```
+4. Тест:
+```bash
+curl -s http://localhost:5000/test
+```
+**Ожидается:** `{"detail":"OK",...,"success":true}` и сообщение 🔥 TestAlert в MAX.
 
-> Маркер успеха: в Zabbix (Monitoring → Hosts) видны все хосты со статусом Enabled.
-
-### Шаг 4.8 — Grafana
-
-1. Откройте `http://<IP>:3000` (admin/admin → смените пароль).
-2. Provisioning подцепит Zabbix datasource и дашборд `All Servers` автоматически.
-3. Если datasource не подхватился: **Connections → Data Sources → Zabbix**, URL `http://localhost/zabbix`, логин `Admin` / `zabbix` → Save & Test.
-
-### Шаг 4.9 — Финальная проверка
+### Шаг 3.5 — финальная проверка
 
 ```bash
 ./scripts/test-all.sh
 ```
-
-> Маркер успеха: `Passed: 12+  Failed: 0`.
+**Ожидается:** `Passed: 20  Failed: 0` (единственный допустимый FAIL до шага 3.4 —
+«MAX token set»).
 
 ---
 
-## 5. Эксплуатация
+## 4. BliKVM (KVM-over-IP) в мониторинге
 
-### Добавить новый филиал
+У BliKVM есть нативные метрики `/api/v1/prometheus/metrics`, но доступ — по
+**API-токену** (не паролю веб-морды!).
 
-Одна строка в `/etc/zabbix-monitor/branches.conf`:
-
+1. Веб-морда BliKVM → **Управление аккаунтом → Мои токены API → Создать токен API**
+   → обязательно разрешение **«Мониторинг»** (токен без него даёт HTTP 403).
+   Сделайте на каждом устройстве (токены разные).
+2. Впишите в `/etc/prometheus/prometheus.yml` вместо
+   `YOUR_BLIKVM_TOKEN_42` / `YOUR_BLIKVM_TOKEN_44`, при необходимости поправьте IP:
+```bash
+sudo sed -i 's|YOUR_BLIKVM_TOKEN_42|bkv_api_...|' /etc/prometheus/prometheus.yml
+sudo sed -i 's|YOUR_BLIKVM_TOKEN_44|bkv_api_...|' /etc/prometheus/prometheus.yml
+sudo promtool check config /etc/prometheus/prometheus.yml | tail -1   # SUCCESS
+sudo systemctl reload prometheus
 ```
-ekb 10.200.5 ural
+3. Проверка (две строки — метрики текут):
+```bash
+curl -s "localhost:9090/api/v1/query?query=blikvm_temperature_c" | python3 -c "import json,sys; [print(r['metric'].get('instance'), r['value'][1]) for r in json.load(sys.stdin)['data']['result']]"
 ```
+Алерты: **BliKvmDown / BliKvmHighTemp (>60°C) / BliKvmLowMem / BliKvmStorageLow (<100МБ)**.
 
-Всё остальное (Prometheus targets, Zabbix-регистрация) произойдёт автоматически в течение 30 минут.
+> ⚠ Известная особенность прошивки: `blikvm_storage_available_bytes` может
+> отдавать 0 при исправном диске — тогда алерт BliKvmStorageLow ложный;
+> проверьте реальную заполненность в веб-морде (System) и при баге поднимите
+> порог или удалите правило.
 
-### Логи
+---
 
-| Компонент | Лог |
-|-----------|-----|
-| Zabbix Server | `/var/log/zabbix/zabbix_server.log` |
-| Zabbix Agent2 | `/var/log/zabbix/zabbix_agent2.log` |
-| Сканеры | `/var/log/zabbix/scanner-*.log` |
-| Webhook | `/var/log/max-webhook-server.log` |
-| Prometheus/Alertmanager/Grafana | `journalctl -u <имя>` |
+## 5. Агенты на Linux-хосты (двусторонний install-agent.sh)
 
-### Обновление проекта с Git
+### Режим 1 — локально (на самой машине-агенте)
 
 ```bash
-cd /opt/monitoring && git pull
-systemctl restart max-webhook-server
+sudo bash /tmp/install-agent.sh --server 192.168.88.36 --name mobile
 ```
+**Ожидаемый вывод:**
+```
+=== ОС: Ubuntu 24.04.4 LTS ===
+... saved [8368/8368]
+=== Агент установлен ===
+Zabbix Server: 192.168.88.36
+Hostname:      mobile
+Порты:         10050 (agent), 9100 (node_exporter)
+```
+Через ≤10 минут хост появится на дашборде (сканер офиса подхватит порт 9100).
 
-### Сборка .deb пакета
+### Режим 2 — push с сервера мониторинга (одной командой на всю сеть)
 
 ```bash
-cd /opt/monitoring
-./packaging/build-deb.sh
-# Результат: zabbix-universal-monitor_<версия>.deb
+sudo ./install-agent.sh --push --server 192.168.88.36 --user nfc     --targets "192.168.88.43:mobile 192.168.88.45:mobile1 192.168.88.35:nfc35"
+```
+Скрипт сам копирует себя на каждую машину (scp) и запускает там от root (ssh+sudo).
+**Маркер завершения:** по каждой цели блок `=== <ip> (<name>) ===` + сводка
+`=== Агент установлен ===`, в конце — `=== PUSH завершён ===`.
+
+### Windows-машины офиса
+
+```powershell
+.\scripts\install-office-agent.ps1 -Server 192.168.88.36
+```
+(скачивает zabbix-agent2 MSI + windows_exporter, открывает порты брандмауэра)
+
+---
+
+## 6. Эксплуатация
+
+| Что | Где |
+|---|---|
+| Список филиалов | `/etc/zabbix-monitor/branches.conf` (`msk 10.50.1 moscow` — одна строка = филиал) |
+| Подсеть офиса | `/etc/zabbix-monitor/office.conf` (`OFFICE_SUBNET=192.168.88`) |
+| Токен MAX | `/etc/default/max-webhook-server` |
+| Токены BliKVM | `/etc/prometheus/prometheus.yml` (строки credentials) |
+| Алерты | `/etc/prometheus/alerts.yml` |
+| Дашборды | `/etc/grafana/dashboards/*.json` (провижнинг перечитывает за 30 с) |
+
+Полезные команды:
+```bash
+./scripts/test-all.sh                          # здоровье всего стека
+curl -s localhost:9090/api/v1/targets | grep -o '"health":"[a-z]*"' | sort | uniq -c
+curl -s localhost:9090/api/v1/alerts           # активные/висящие алерты
+journalctl -u prometheus -u grafana-server --since "-10min" --no-pager
 ```
 
 ---
 
-## 6. Безопасность
+## 7. Траблшутинг (симптом → причина → лечение)
 
-- Пароль БД Zabbix меняется в `configs/zabbix/zabbix_server.conf` **до** установки (и в `install-server.sh`).
-- Токен MAX хранится только в `/etc/default/max-webhook-server` (не в репозитории!).
-- В `.gitignore` исключены `.env`, логи, архивы — секреты не попадут в Git.
-- Порты наружу открывать не нужно: сервер сам подключается к филиалам; филиалы достаточно видеть через VPN/LAN.
+| Симптом | Причина | Лечение |
+|---|---|---|
+| Скрипт «завис» после строки «Проверка доступности репозитория Zabbix» и вышел молча | wget 404 (был неверный URL в v4.1) | v4.2 чинит; вручную: `wget -O /tmp/zabbix-release.deb "https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest+ubuntu22.04_all.deb" && dpkg -i /tmp/zabbix-release.deb` |
+| `gzip: .../server.sql.gz: No such file` | В 7.0.32 путь `/usr/share/zabbix-sql-scripts/...` | v4.2 ищет через `dpkg -L`; вручную: `zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz \| mysql zabbix` |
+| `ERROR 1419 (HY000) ... SUPER privilege` при импорте схемы | MySQL 8 + binlog | `mysql -e "SET GLOBAL log_bin_trust_function_creators=1"` (делает v4.2), либо импорт под root через сокет |
+| Grafana «No data» + «Failed to upgrade legacy queries» | У datasource нет `uid: prometheus` | Добавить `uid: prometheus` в provisioning и `systemctl restart grafana-server` |
+| Grafana не ставится: `403 Access Denied` с apt.grafana.com | CDN заблокирован для вашего IP | v4.2 сам качает `.deb` с `dl.grafana.com`; вручную: `wget https://dl.grafana.com/oss/release/grafana_11.1.0_amd64.deb && dpkg -i ... && apt-get install -f -y` |
+| `grafana: command not found` при установке плагина | CLI лежит не в PATH | v4.2 ищет `/usr/sbin/grafana-cli` и `/usr/share/grafana/bin/grafana cli` |
+| BliKVM: 401 Unauthorized | Авторизация не basic, а Bearer-токен | Создать API-токен (scope «Мониторинг»), конфиг `authorization: {type: Bearer, credentials: ...}` |
+| BliKVM: 403 | Токен без scope «Мониторинг» | Пересоздать токен с разрешением |
+| В targets API «призраки» `http://IP:443/metrics` с job=blikvm | blikvm.json лежит в file-sd/office, job node (glob office/*.json) дублирует его http-скрейпом | Держать таргеты BliKVM в static_configs (как в v4.2), НЕ в file-sd/office |
+| Изменения в file-sd/json не подхватываются (старые таргеты висят) | file_sd иногда пропускает fsnotify-событие | `systemctl restart prometheus` (reload может не перечитать) |
+| `found multiple scrape configs with job name` | Два job с одинаковым именем запрещены | Дать уникальные имена (blikvm-42/44), алерты ловить `job=~"blikvm.*"` |
+| Мусорные 10.200.x.x в дашборде | Примерные филиалы в branches.conf (v4.1) | Очистить conf, удалить json, и **вычистить серии**: включить admin API (`ARGS="--web.enable-admin-api"` в `/etc/default/prometheus`, restart), затем `curl -X POST -g 'localhost:9090/api/v1/admin/tsdb/delete_series?match[]={instance=~"10.200.*"}'`, `curl -X POST localhost:9090/api/v1/admin/tsdb/clean_tombstones`, вернуть ARGS="", restart. Результат проверять ТОЛЬКО через `/api/v1/label/instance/values` (instant query уставшие серии не показывает!) |
+| `spb.json` с `"targets": [""]` | scanner-branches v4.1 при пустом результате | Исправлено в v4.2 (пустой результат → файл удаляется) |
 
 ---
 
-## 7. Траблшутинг
+## 8. Роадмап
 
-| Симптом | Причина | Решение |
-|---------|---------|---------|
-| Targets `DOWN` в Prometheus | Нет node_exporter на хосте | `apt install prometheus-node-exporter` или скрипт установки агента |
-| Хост не появляется в Zabbix | Сканер не видит порт 10050 | Проверить `systemctl status zabbix-agent2` на хосте и firewall |
-| Тест `/test` не шлёт в MAX | Неверный токен/chat_id | `journalctl -u max-webhook-server -n 50` |
-| Webhook 500 | Flask не стартует | `systemctl status max-webhook-server`, проверить `/etc/default/max-webhook-server` |
-| Grafana пустая | Datasource не настроен | Проверить provisioning в `/etc/grafana/provisioning/` |
-
-
-git clone https://github.com/Kant84/zabbix-monitoring-project.git /opt/monitoring
-cd /opt/monitoring && chmod +x scripts/*.sh
-./scripts/install-server.sh          # Zabbix+MySQL+Prometheus+Alertmanager+Grafana+Webhook+таймеры сканеров
-nano /etc/default/max-webhook-server # вставь токен MAX
-curl http://localhost:5000/test      # тестовое сообщение в MAX
-./scripts/test-all.sh                # финальная проверка: Passed 14, Failed 0
----
-
-*Версия 4.1.0 | Поддержка: Ubuntu 22.04–24.04, Debian 11–13, Windows 10–11 (агенты)*
+- [ ] SNMP MikroTik (шаблон «MikroTik by SNMP»)
+- [ ] Blackbox-exporter: ping «чужих» устройств, ICMP+HTTPS для VIP
+- [ ] Авто-добавление хостов в Zabbix через API (scanner → host.create)
+- [ ] Разбор `blikvm_storage_available_bytes = 0` (баг прошивки?)
+- [ ] Экспортёр PostgreSQL для HA-пары (репликация, слоты)

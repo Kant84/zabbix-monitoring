@@ -1,101 +1,47 @@
 #!/bin/bash
-# Сканер филиалов: обновляет file-sd JSON для Prometheus + регистрирует хосты в Zabbix.
-# Подсети НЕ зашиты в коде — читаются из /etc/zabbix-monitor/branches.conf:
-#   <city> <подсеть-без-последнего-октета> <region>
-set -e
-
-LOG="/var/log/zabbix/scanner-branches.log"
+# scanner-branches.sh v4.2 — обнаружение серверов филиалов → file-sd Prometheus
+# Формат /etc/zabbix-monitor/branches.conf:
+#   <city> <подсеть-без-последнего-октета> <region>     (пример: msk 10.50.1 moscow)
+# Каждый цикл: пингует подсеть, ищет node_exporter (9100), пишет
+# /etc/prometheus/file-sd/branches/<city>.json. Пустой результат → файл удаляется
+# (баг v4.1: писался "targets": [""] и устройство висело в мониторинге фантомом).
+set -u
 FILE_SD_DIR="/etc/prometheus/file-sd/branches"
 BRANCHES_CONF="${BRANCHES_CONF:-/etc/zabbix-monitor/branches.conf}"
-ZABBIX_URL="${ZABBIX_URL:-http://localhost/zabbix/api_jsonrpc.php}"
-ZABBIX_USER="${ZABBIX_USER:-Admin}"
-ZABBIX_PASS="${ZABBIX_PASS:-zabbix}"
-# Шаблон "Linux by Zabbix agent active". Проверьте свой ID:
-#   curl ... -d '{"method":"template.get","params":{"filter":{"host":"Linux by Zabbix agent active"}}}'
-LINUX_TEMPLATE_ID="${LINUX_TEMPLATE_ID:-10343}"
+LOG="/var/log/zabbix/scanner-branches.log"
+mkdir -p "$FILE_SD_DIR" /var/log/zabbix
+log(){ echo "$(date '+%F %T') $*" >> "$LOG"; }
 
-log() { echo "[$(date '+%F %T')] $1" | tee -a "$LOG"; }
+[ -f "$BRANCHES_CONF" ] || { log "ERROR: нет конфига $BRANCHES_CONF"; exit 1; }
 
-if [ ! -f "$BRANCHES_CONF" ]; then
-    log "ERROR: нет конфига $BRANCHES_CONF"; exit 1
-fi
-
-mkdir -p "$FILE_SD_DIR"
-
-TOKEN=$(curl -s -X POST -H 'Content-Type: application/json' \
-  -d "{\"jsonrpc\":\"2.0\",\"method\":\"user.login\",\"params\":{\"username\":\"$ZABBIX_USER\",\"password\":\"$ZABBIX_PASS\"},\"id\":1}" \
-  "$ZABBIX_URL" | grep -o '"result":"[^"]*"' | cut -d'"' -f4)
-
-# Проверка существования шаблона
-tpl_ok=$(curl -s -X POST -H 'Content-Type: application/json' -d "{
-  \"jsonrpc\":\"2.0\",\"method\":\"template.get\",
-  \"params\":{\"templateids\":[\"$LINUX_TEMPLATE_ID\"],\"output\":[\"templateid\"]},
-  \"auth\":\"$TOKEN\",\"id\":1}" "$ZABBIX_URL" | grep -c '"templateid"' || true)
-if [ "$tpl_ok" -eq 0 ]; then
-    log "ERROR: шаблон $LINUX_TEMPLATE_ID не найден. Узнайте ID: template.get filter host='Linux by Zabbix agent active'"
-    exit 1
-fi
-
-discover_in_subnet() {
-    local subnet="$1"
-    for i in $(seq 1 254); do
-        local ip="${subnet}.${i}"
-        ping -c1 -W1 "$ip" >/dev/null 2>&1 || continue
-        nc -z -w1 "$ip" 9100 2>/dev/null && echo "${ip}:9100"
-    done
-}
-
-register_in_zabbix() {
-    local ip="$1" hostname="$2"
-    local exists
-    exists=$(curl -s -X POST -H 'Content-Type: application/json' -d "{
-      \"jsonrpc\":\"2.0\",\"method\":\"host.get\",
-      \"params\":{\"filter\":{\"host\":\"$hostname\"},\"output\":[\"hostid\"]},
-      \"auth\":\"$TOKEN\",\"id\":1}" "$ZABBIX_URL" | grep -c '"hostid"' || true)
-    [ "$exists" -gt 0 ] && return 0
-    curl -s -X POST -H 'Content-Type: application/json' -d "{
-      \"jsonrpc\":\"2.0\",\"method\":\"host.create\",
-      \"params\":{
-        \"host\":\"$hostname\",
-        \"interfaces\":[{\"type\":1,\"main\":1,\"useip\":1,\"ip\":\"$ip\",\"dns\":\"\",\"port\":\"10050\"}],
-        \"groups\":[{\"groupid\":\"2\"}],
-        \"templates\":[{\"templateid\":\"$LINUX_TEMPLATE_ID\"}]
-      },
-      \"auth\":\"$TOKEN\",\"id\":1}" "$ZABBIX_URL" >/dev/null
-    log "  Registered in Zabbix: $hostname ($ip)"
-}
-
-log "=== Branch scan started ==="
+# Удаляем json филиалов, которых больше нет в конфиге
+declare -A keep
+while read -r city subnet region; do
+    case "$city" in ''|\#*) continue;; esac
+    keep[$city]=1
+done < "$BRANCHES_CONF"
+for f in "$FILE_SD_DIR"/*.json; do
+    [ -e "$f" ] || continue
+    c=$(basename "$f" .json)
+    [ -n "${keep[$c]:-}" ] || { rm -f "$f"; log "removed stale $f"; }
+done
 
 while read -r city subnet region; do
-    [[ "$city" =~ ^#.*$ || -z "$city" ]] && continue
-    log "Scanning $city ($subnet.0/24)..."
-
+    case "$city" in ''|\#*) continue;; esac
     targets=()
-    while IFS= read -r t; do
-        [ -n "$t" ] && targets+=("$t")
-    done < <(discover_in_subnet "$subnet")
-
-    json_targets=$(printf '"%s",' "${targets[@]}" 2>/dev/null | sed 's/,$//')
-    cat > "$FILE_SD_DIR/${city}.json" <<EOF
-[
-  {
-    "targets": [${json_targets}],
-    "labels": {
-      "city": "${city}",
-      "region": "${region}",
-      "env": "production",
-      "group": "branch-${city}"
-    }
-  }
-]
-EOF
-    log "  $city: ${#targets[@]} targets"
-
-    for t in "${targets[@]}"; do
-        ip="${t%%:*}"
-        register_in_zabbix "$ip" "branch-${city}-${ip##*.}"
+    for i in $(seq 1 254); do
+        ip="${subnet}.${i}"
+        if ping -c1 -W1 "$ip" >/dev/null 2>&1 && nc -z -w1 "$ip" 9100 >/dev/null 2>&1; then
+            targets+=("\"${ip}:9100\"")
+        fi
     done
+    if [ "${#targets[@]}" -eq 0 ]; then
+        rm -f "$FILE_SD_DIR/${city}.json"
+        log "$city: живых хостов не найдено, json удалён"
+        continue
+    fi
+    printf '[\n  {\n    "targets": [%s],\n    "labels": {\n      "city": "%s",\n      "region": "%s",\n      "env": "production",\n      "group": "branch-%s"\n    }\n  }\n]\n' \
+        "$(IFS=,; echo "${targets[*]}")" "$city" "$region" "$city" > "$FILE_SD_DIR/${city}.json"
+    chown prometheus:prometheus "$FILE_SD_DIR/${city}.json" 2>/dev/null || true
+    log "$city: найдено ${#targets[@]} хостов"
 done < "$BRANCHES_CONF"
-
-log "=== Branch scan completed ==="

@@ -1,7 +1,10 @@
 apiVersion: 1
-
+# ⚠ ВАЖНО (баг v4.1): Prometheus datasource ОБЯЗАН иметь uid: prometheus —
+# дашборды ссылаются на него по uid. Без него: «No data» и
+# «Templating: Failed to upgrade legacy queries».
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://localhost:9090
@@ -11,12 +14,14 @@ datasources:
   - name: Zabbix
     type: alexanderzobnin-zabbix-datasource
     access: proxy
-    url: http://localhost/zabbix/api_jsonrpc.php
+    url: http://localhost/zabbix
     jsonData:
       username: Admin
-      password: zabbix
       trends: true
-      trendsFrom: 7d
-      trendsRange: 4d
-      cacheTTL: 1h
+      trendsFrom: "7d"
+      trendsRange: "4d"
+      cacheTTL: "1h"
+      alerting: true
+    secureJsonData:
+      password: zabbix
     editable: true
