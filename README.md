@@ -174,7 +174,7 @@ sudo systemctl reload prometheus
 ```bash
 curl -s "localhost:9090/api/v1/query?query=blikvm_temperature_c" | python3 -c "import json,sys; [print(r['metric'].get('instance'), r['value'][1]) for r in json.load(sys.stdin)['data']['result']]"
 ```
-Алерты: **BliKvmDown / BliKvmHighTemp (>60°C) / BliKvmLowMem**.
+Алерты: **BliKvmDown / BliKvmHighTemp (>60°C) / BliKvmLowMem**. Напоминания по BliKVM — раз в 8 ч (отдельный маршрут `match_re: alertname: BliKvm.*` в alertmanager.yml, v4.2.4); серверные алерты — без изменений (critical 30 мин / high 1 ч / warning 4 ч).
 
 > ⚠ `blikvm_storage_available_bytes` всегда 0 — и это НЕ баг: корневой раздел
 > BliKVM (116 МБ) — это образ системы, он штатно заполнен на 100%. Пользовательские
@@ -209,6 +209,83 @@ sudo ./install-agent.sh --push --server 192.168.88.36 --user nfc     --targets "
 Скрипт сам копирует себя на каждую машину (scp) и запускает там от root (ssh+sudo).
 **Маркер завершения:** по каждой цели блок `=== <ip> (<name>) ===` + сводка
 `=== Агент установлен ===`, в конце — `=== PUSH завершён ===`.
+
+### Клубы с публичным IP (по всей России, без доступа к офисному Mikrotik)
+
+Схема «офис сам ходит к клубу» (passive-проверки). Понадобится: доступ по SSH
+на клубный сервер и **один раз** — проброс двух портов на роутере КЛУБА
+(внешний порт = внутренний!, на внутренний IP сервера):
+
+| Внешний порт | Куда | Для чего |
+|---|---|---|
+| TCP 9100 | `<внутр.IP клуба>:9100` | метрики → Grafana |
+| TCP 10050 | `<внутр.IP клуба>:10050` | опрос Zabbix-агентом |
+
+Заодно сделай на роутере клуба **резервирование DHCP** для сервера (привязка
+по MAC), чтобы внутренний IP не менялся.
+
+**1. На сервере мониторинга** — регистрация хоста (PSK генерируется сам):
+```bash
+./scripts/add-club-host.sh --name club-nn-fizra --ip 5.227.70.150
+```
+**2. На клубном сервере:**
+```bash
+wget -q https://raw.githubusercontent.com/Kant84/zabbix-monitoring/main/scripts/install-agent.sh
+sudo bash install-agent.sh --passive-only --server <белый IP офиса> --name club-nn-fizra --psk <PSK из шага 1>
+```
+**3. На клубе — файрвол** (только IP офиса, остальным DROP):
+```bash
+sudo iptables -I INPUT 1 -p tcp --dport <SSH-порт> -j ACCEPT   # СНАЧАЛА свой SSH!
+sudo iptables -I INPUT 2 -p tcp -s <белый IP офиса> --dport 10050 -j ACCEPT
+sudo iptables -I INPUT 3 -p tcp -s <белый IP офиса> --dport 9100 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 10050 -j DROP
+sudo iptables -A INPUT -p tcp --dport 9100 -j DROP
+sudo apt install -y iptables-persistent     # сохранить правила
+```
+**4. На сервере мониторинга** — Prometheus-таргет (3 строки в job `node`,
+отступ 4 пробела у `static_configs:`):
+```yaml
+    static_configs:
+      - targets: ['<IP клуба>:9100']
+        labels: {club: '<city-name>', location_type: 'branch'}
+```
+затем `sudo promtool check config /etc/prometheus/prometheus.yml | tail -1` →
+`SUCCESS`, `sudo systemctl reload prometheus`.
+
+**Проверка:** `nc -z -w3 <IP клуба> 9100` → OPEN; в Zabbix хост → Available;
+в Grafana «All Servers» появляется плашка клуба.
+
+### Здоровье железа и служб (v4.2.5, install-addon.sh)
+
+Самоопределение — не нужно знать имена служб или дисков:
+
+```bash
+sudo ./scripts/install-addon.sh --smart --systemd          # на каждом сервере
+# или сразу на все офисные машины:
+sudo ./scripts/install-addon.sh --push --user nfc --targets \
+    "192.168.88.36:monitor 192.168.88.43:mobile 192.168.88.45:mobile1 192.168.88.35:nfc35"
+```
+
+- `--smart` — smartctl_exporter (порт 9633): SMART всех дисков (health, температура,
+  атрибуты/износ — диски определяет сам smartctl). На monitor'е также:
+  `echo '192.168.88' > /etc/zabbix-monitor/smart.conf` + включить scanner-smart.timer
+  (сканер сам найдёт все 9633 в сети).
+- `--systemd` — коллектор systemd в node_exporter: метрика состояния **всех** служб.
+  Алерт `SystemdServiceFailed` сработает на любую упавшую службу (1С, СКУД — где бы
+  они ни стояли) и пришлёт её имя. Дополнительно на серверах с критичными службами:
+  `systemctl list-units --type=service --state=running | grep -iE '1c|скуд|zookeeper'`
+  — имена появятся в алертах автоматически.
+- Алерты: SmartDeviceUnhealthy (SMART FAILED), SmartDeviceHot (>60°C),
+  SystemdServiceFailed. Без ручного перечисления имён.
+
+### Клуб за NAT без публичного IP
+
+Тогда только active-режим: агент сам стучится в офис — нужен **один проброс на
+офисном Mikrotik**: `TCP 10051 → <IP сервера мониторинга>`. Хост создаётся без
+`--ip` (`add-club-host.sh --name club-x`) — шаблон active; на клубе:
+`install-agent.sh --active --server <белый IP офиса>:10051 --name club-x --psk <PSK>`.
+Файрвол клуба не нужен (только исходящий интернет). Метрики Prometheus через
+этот вариант не получить — только Zabbix-данные (Zabbix-datasource в Grafana).
 
 ### Windows-машины офиса
 
@@ -254,6 +331,10 @@ journalctl -u prometheus -u grafana-server --since "-10min" --no-pager
 | BliKVM: 403 | Токен без scope «Мониторинг» | Пересоздать токен с разрешением |
 | В targets API «призраки» `http://IP:443/metrics` с job=blikvm | blikvm.json лежит в file-sd/office, job node (glob office/*.json) дублирует его http-скрейпом | Держать таргеты BliKVM в static_configs (как в v4.2), НЕ в file-sd/office |
 | Изменения в file-sd/json не подхватываются (старые таргеты висят) | file_sd иногда пропускает fsnotify-событие | `systemctl restart prometheus` (reload может не перечитать) |
+| `zabbix_agent2: ... open /etc/zabbix/zabbix_agentd.psk: permission denied` (агент в auto-restart) | agent2 работает от user `zabbix`, а PSK записан `root 600` | `chown root:zabbix /etc/zabbix/zabbix_agentd.psk && chmod 640 ...` (исправлено в v4.2.4) |
+| `nc` к клубу: `Connection refused` vs тишина/timeout | refused = пакет дошёл, порт не слушает (агент упал / проброс не туда); timeout = дроп по пути (файрвол/роутер) | refused → `systemctl status zabbix-agent2`, `ss -tlnp \| grep 10050`; timeout → смотреть iptables на клубе и проброс на роутере |
+| Проброс на роутере клуба сделан, но порты закрыты | внешний и внутренний порт различаются или адрес не тот | порты должны совпадать: 9100→IP:9100, 10050→IP:10050; внутренний IP = адрес сервера в LAN клуба |
+| VIP (.50) «не виден» в роутере (DHCP leases/ARP) | VIP keepalived — статика, не DHCP-клиент; в ARP роутера попадает только при транзитном трафике | норма. Проверка: `/ping 192.168.88.50` с Mikrotik. Для WG-доступа пиру хватает AllowedIPs …, 192.168.88.0/24 |
 | `found multiple scrape configs with job name` | Два job с одинаковым именем запрещены | Дать уникальные имена (blikvm-42/44), алерты ловить `job=~"blikvm.*"` |
 | Мусорные 10.200.x.x в дашборде | Примерные филиалы в branches.conf (v4.1) | Очистить conf, удалить json, и **вычистить серии**: включить admin API (`ARGS="--web.enable-admin-api"` в `/etc/default/prometheus`, restart), затем `curl -X POST -g 'localhost:9090/api/v1/admin/tsdb/delete_series?match[]={instance=~"10.200.*"}'`, `curl -X POST localhost:9090/api/v1/admin/tsdb/clean_tombstones`, вернуть ARGS="", restart. Результат проверять ТОЛЬКО через `/api/v1/label/instance/values` (instant query уставшие серии не показывает!) |
 | `spb.json` с `"targets": [""]` | scanner-branches v4.1 при пустом результате | Исправлено в v4.2 (пустой результат → файл удаляется) |

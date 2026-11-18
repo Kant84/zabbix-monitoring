@@ -1,0 +1,6 @@
+[Unit]
+Description=Scanner smartctl_exporter (SMART disks discovery)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/monitoring/scripts/scanner-smart.sh

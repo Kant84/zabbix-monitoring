@@ -67,6 +67,34 @@ groups:
           summary: "BliKVM {{ $labels.instance }} мало памяти"
           description: "Доступно менее 250 МБ RAM"
 
+      # === SSD/SMART (v4.2.5, install-addon.sh --smart) ===
+      - alert: SmartDeviceUnhealthy
+        expr: smartctl_device_health_status == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Диск {{ $labels.device }} на {{ $labels.instance }}: SMART FAILED"
+          description: "smartctl: health status не PASSED — диск под замену"
+
+      - alert: SmartDeviceHot
+        expr: smartctl_device_temperature > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Перегрев диска {{ $labels.device }} на {{ $labels.instance }}: {{ $value }}°C"
+
+      # === Службы systemd (v4.2.5, install-addon.sh --systemd): ЛЮБАЯ упавшая служба ===
+      - alert: SystemdServiceFailed
+        expr: node_systemd_units{state="failed"} > 0
+        for: 3m
+        labels:
+          severity: high
+        annotations:
+          summary: "Служба {{ $labels.name }} упала на {{ $labels.instance }}"
+          description: "systemd unit в состоянии failed (1С/СКУД/прочие — имя в алерте)"
+
       # BliKvmStorageLow УДАЛЁН в v4.2.1: корневой раздел BliKVM (116 МБ) —
       # это образ системы, он штатно заполнен на 100% (storage_available = 0 — норма).
       # Пользовательские данные живут на /data (проверено: 26 ГБ свободно) и

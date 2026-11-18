@@ -1,0 +1,10 @@
+[Unit]
+Description=Scanner smartctl every 10 min
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Unit=scanner-smart.service
+
+[Install]
+WantedBy=timers.target
