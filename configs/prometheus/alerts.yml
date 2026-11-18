@@ -96,13 +96,13 @@ groups:
           description: "Percentage Used превысил 80% — планируй замену диска"
 
       - alert: SystemdServiceFailed
-        expr: node_systemd_units{state="failed"} > 0
+        expr: node_systemd_unit_state{name!="",state="failed"} == 1
         for: 3m
         labels:
           severity: high
         annotations:
           summary: "Служба {{ $labels.name }} упала на {{ $labels.instance }}"
-          description: "systemd unit в состоянии failed (1С/СКУД/прочие — имя в алерте)"
+          description: "Служба {{ $labels.name }} упала (systemd unit failed)"
 
       # BliKvmStorageLow УДАЛЁН в v4.2.1: корневой раздел BliKVM (116 МБ) —
       # это образ системы, он штатно заполнен на 100% (storage_available = 0 — норма).
