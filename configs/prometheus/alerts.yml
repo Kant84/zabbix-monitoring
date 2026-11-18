@@ -69,7 +69,7 @@ groups:
 
       # === SSD/SMART (v4.2.5, install-addon.sh --smart) ===
       - alert: SmartDeviceUnhealthy
-        expr: smartctl_device_health_status == 0
+        expr: smartctl_device_smart_status == 0
         for: 5m
         labels:
           severity: critical
@@ -86,6 +86,15 @@ groups:
           summary: "Перегрев диска {{ $labels.device }} на {{ $labels.instance }}: {{ $value }}°C"
 
       # === Службы systemd (v4.2.5, install-addon.sh --systemd): ЛЮБАЯ упавшая служба ===
+      - alert: SmartWearHigh
+        expr: smartctl_device_percentage_used > 80
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Износ NVMe {{ $labels.device }} на {{ $labels.instance }}: {{ $value }}%"
+          description: "Percentage Used превысил 80% — планируй замену диска"
+
       - alert: SystemdServiceFailed
         expr: node_systemd_units{state="failed"} > 0
         for: 3m

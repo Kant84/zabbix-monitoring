@@ -66,8 +66,7 @@ Description=smartctl exporter (SMART disks)
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/smartctl_exporter --smartctl.device-exclude="nvme[1-9]" \
-    --web.listen-address=0.0.0.0:9633
+ExecStart=/usr/local/bin/smartctl_exporter --web.listen-address=0.0.0.0:9633
 Restart=always
 User=root
 
