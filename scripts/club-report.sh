@@ -5,15 +5,21 @@
 # MAX Bot API (uploads -> file attachment). Запуск: club-report.timer (1-е, 09:00).
 # =============================================================================
 set -e
-source /etc/default/max-webhook-server
-[ -n "${MAX_BOT_TOKEN:-}" ] && [ "$MAX_BOT_TOKEN" != "YOUR_BOT_TOKEN_HERE" ] || { echo "Токен MAX не задан"; exit 1; }
+[ -f /etc/default/max-webhook-server ] || { echo "Нет /etc/default/max-webhook-server"; exit 1; }
 
 python3 <<'PYEOF'
 import json, urllib.request, urllib.parse, os, time, datetime, subprocess, re
 
 ZAPI = "http://localhost/zabbix/api_jsonrpc.php"
 PROM = "http://localhost:9090"
-TOKEN = os.environ["MAX_BOT_TOKEN"]; CHAT = os.environ["MAX_CHAT_ID"]
+env = {}
+for line in open("/etc/default/max-webhook-server"):
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line: continue
+    k, v = line.split("=", 1)
+    env[k.strip()] = v.strip().strip('"').strip("'")
+TOKEN = env["MAX_BOT_TOKEN"]; CHAT = env["MAX_CHAT_ID"]
+if not TOKEN or TOKEN.startswith("YOUR_"): raise SystemExit("Токен MAX не задан")
 BASE = "https://platform-api2.max.ru"   # рекомендованный домен (dev.max.ru)
 
 def post(url, payload, auth=None):
