@@ -27,7 +27,7 @@ while read -r net; do
             echo "${ip}:9633|$name" >> "$found"
         fi
     else
-        seq 1 254 | xargs -P 64 -I{} sh -c "nc -z -w1 ${net}.{} 9633 2>/dev/null && echo ${net}.{}:9633|" >> "$found"
+        seq 1 254 | xargs -P 64 -I{} sh -c "nc -z -w1 ${net}.{} 9633 2>/dev/null && echo ${net}.{}:9633" >> "$found"
     fi
 done < "$CONF"
 sort -u "$found" -o "$found"
