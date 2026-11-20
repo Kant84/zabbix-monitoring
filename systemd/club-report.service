@@ -1,0 +1,6 @@
+[Unit]
+Description=Monthly club report to MAX
+
+[Service]
+Type=oneshot
+ExecStart=/opt/monitoring/scripts/club-report.sh

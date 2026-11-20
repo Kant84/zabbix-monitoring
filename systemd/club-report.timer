@@ -1,0 +1,10 @@
+[Unit]
+Description=Club report monthly (1st, 09:00)
+
+[Timer]
+OnCalendar=*-*-01 09:00:00
+Persistent=true
+Unit=club-report.service
+
+[Install]
+WantedBy=timers.target
