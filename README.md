@@ -282,6 +282,27 @@ sudo ./scripts/install-addon.sh --push --user nfc --targets \
 - Алерты: SmartDeviceUnhealthy (SMART FAILED), SmartDeviceHot (>60°C),
   SystemdServiceFailed. Без ручного перечисления имён.
 
+### Безопасность: наблюдение за SSH (v4.2.7, install-security.sh)
+
+**Только наблюдение и оповещения — без банов и блокировок.** Метрики идут по
+уже открытому порту 9100 (textfile-коллектор node_exporter, парсинг /var/log/auth.log
+раз в минуту) — клубам роутер трогать НЕ нужно.
+
+```bash
+sudo ./scripts/install-security.sh                 # локально
+sudo ./scripts/install-security.sh --push --user nfc --targets "192.168.88.43:mobile ..."
+```
+
+| Алерт | Когда | Текст |
+|---|---|---|
+| SshBruteForce | >10 неудачных с ЧУЖОГО IP за 10 мин | IP + подбираемый логин + сервер |
+| SshLoginSuccess | любой успешный вход | пользователь + IP + сервер |
+| SshRootLogin | вход под root | IP + сервер (критичность high) |
+
+VPN 10.10.1.x и локалки 192.168.x.x — «свои»: опечатки админов не тревожат,
+алертит только интернет. Панели «Безопасность» на дашборде: подборы по IP,
+журнал входов за 24ч.
+
 ### Клуб за NAT без публичного IP
 
 Тогда только active-режим: агент сам стучится в офис — нужен **один проброс на

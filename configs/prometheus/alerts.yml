@@ -95,6 +95,36 @@ groups:
           summary: "Износ NVMe {{ $labels.device }} на {{ $labels.instance }}: {{ $value }}%"
           description: "Percentage Used превысил 80% — планируй замену диска"
 
+
+      # === SSH-наблюдение (v4.2.7, install-security.sh) — ТОЛЬКО алерты, без банов ===
+      - alert: SshBruteForce
+        expr: sum by (instance, ip, user) (increase(ssh_failed_logins_total{ip!~"10\\.10\\.1\\..*|192\\.168\\..*|127\\..*"}[10m])) > 10
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Подбор SSH: {{ $labels.ip }} -> '{{ $labels.user }}' на {{ $labels.instance }}"
+          description: "Более 10 неудачных попыток за 10 минут с чужого IP (VPN/локалки исключены)."
+
+      - alert: SshLoginSuccess
+        expr: sum by (instance, ip, user) (increase(ssh_success_logins_total[5m])) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "SSH вход: '{{ $labels.user }}' с {{ $labels.ip }} на {{ $labels.instance }}"
+          description: "Успешный вход по SSH."
+
+      - alert: SshRootLogin
+        expr: sum by (instance, ip) (increase(ssh_success_logins_total{user="root"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: high
+        annotations:
+          summary: "ROOT SSH вход с {{ $labels.ip }} на {{ $labels.instance }}"
+          description: "Вход под root — проверь, что это ты."
+
+
       - alert: SystemdServiceFailed
         expr: node_systemd_unit_state{name!="",state="failed"} == 1
         for: 3m
