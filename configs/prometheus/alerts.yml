@@ -7,7 +7,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Сервер {{ $labels.instance }} недоступен"
+          summary: "Сервер {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }} недоступен"
           description: "Нет метрик node_exporter более 2 минут (location: {{ $labels.location_type }})"
 
       - alert: HighCPU
@@ -16,7 +16,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Высокая загрузка CPU на {{ $labels.instance }}"
+          summary: "Высокая загрузка CPU на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Загрузка CPU выше 85% более 15 минут"
 
       - alert: HighMemory
@@ -25,7 +25,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Высокое потребление RAM на {{ $labels.instance }}"
+          summary: "Высокое потребление RAM на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Использовано более 90% RAM более 10 минут"
 
       - alert: DiskFull
@@ -34,7 +34,7 @@ groups:
         labels:
           severity: high
         annotations:
-          summary: "Заполнение диска на {{ $labels.instance }}"
+          summary: "Заполнение диска на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Корневой раздел заполнен более чем на 85%"
 
   # === BliKVM (добавлено v4.2) ===
@@ -46,7 +46,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "BliKVM {{ $labels.instance }} недоступен"
+          summary: "BliKVM {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }} недоступен"
           description: "Не снимаются метрики BliKVM более 2 минут"
 
       - alert: BliKvmHighTemp
@@ -55,7 +55,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "BliKVM {{ $labels.instance }} перегрев {{ $value }}°C"
+          summary: "BliKVM {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }} перегрев {{ $value }}°C"
           description: "Температура устройства выше 60°C более 5 минут"
 
       - alert: BliKvmLowMem
@@ -64,7 +64,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "BliKVM {{ $labels.instance }} мало памяти"
+          summary: "BliKVM {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }} мало памяти"
           description: "Доступно менее 250 МБ RAM"
 
       # === SSD/SMART (v4.2.5, install-addon.sh --smart) ===
@@ -74,7 +74,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Диск {{ $labels.device }} на {{ $labels.instance }}: SMART FAILED"
+          summary: "Диск {{ $labels.device }} на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}: SMART FAILED"
           description: "smartctl: health status не PASSED — диск под замену"
 
       - alert: SmartDeviceHot
@@ -83,7 +83,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Перегрев диска {{ $labels.device }} на {{ $labels.instance }}: {{ $value }}°C"
+          summary: "Перегрев диска {{ $labels.device }} на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}: {{ $value }}°C"
 
       # === Службы systemd (v4.2.5, install-addon.sh --systemd): ЛЮБАЯ упавшая служба ===
       - alert: SmartWearHigh
@@ -92,7 +92,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Износ NVMe {{ $labels.device }} на {{ $labels.instance }}: {{ $value }}%"
+          summary: "Износ NVMe {{ $labels.device }} на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}: {{ $value }}%"
           description: "Percentage Used превысил 80% — планируй замену диска"
 
 
@@ -103,7 +103,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Подбор SSH: {{ $labels.ip }} -> '{{ $labels.user }}' на {{ $labels.instance }}"
+          summary: "Подбор SSH: {{ $labels.ip }} -> '{{ $labels.user }}' на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Более 10 неудачных попыток за 10 минут с чужого IP (VPN/локалки исключены)."
 
       - alert: SshLoginSuccess
@@ -112,7 +112,7 @@ groups:
         labels:
           severity: info
         annotations:
-          summary: "SSH вход: '{{ $labels.user }}' с {{ $labels.ip }} на {{ $labels.instance }}"
+          summary: "SSH вход: '{{ $labels.user }}' с {{ $labels.ip }} на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Вход: {{ $labels.user }} с {{ $labels.ip }}"
 
       - alert: SshRootLogin
@@ -121,7 +121,7 @@ groups:
         labels:
           severity: high
         annotations:
-          summary: "ROOT SSH вход с {{ $labels.ip }} на {{ $labels.instance }}"
+          summary: "ROOT SSH вход с {{ $labels.ip }} на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Вход под root — проверь, что это ты."
 
 
@@ -131,7 +131,7 @@ groups:
         labels:
           severity: high
         annotations:
-          summary: "Служба {{ $labels.name }} упала на {{ $labels.instance }}"
+          summary: "Служба {{ $labels.name }} упала на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
           description: "Служба {{ $labels.name }} упала (systemd unit failed)"
 
       # BliKvmStorageLow УДАЛЁН в v4.2.1: корневой раздел BliKVM (116 МБ) —
