@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ "$EUID" -eq 0 ] || { echo "Запустите от root: sudo $0 ..."; exit 1; }
-[ "$SMART" -eq 0 ] && [ "$SYSTEMD" -eq 0 ] && { echo "Укажите --smart и/или --systemd"; exit 1; }
+[ "$PUSH" -eq 0 ] && [ "$SMART" -eq 0 ] && [ "$SYSTEMD" -eq 0 ] && { echo "Укажите --smart и/или --systemd"; exit 1; }
 
 install_local() {
     echo "=== ОС: $(. /etc/os-release; echo $PRETTY_NAME) ==="

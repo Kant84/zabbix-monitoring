@@ -49,63 +49,34 @@
  "panels": [
   {
    "id": 1,
-   "type": "stat",
+   "type": "marcusolsson-dynamictext-panel",
    "title": "Статус серверов",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
    "gridPos": {
-    "h": 6,
+    "h": 5,
     "w": 24,
     "x": 0,
     "y": 0
    },
    "targets": [
     {
-     "expr": "up{job=\"node\", instance=~\"$server\"} or up{job=~\"blikvm.*\"}",
+     "expr": "(up{job=\"node\"} * on(instance) group_left(nodename) node_uname_info{job=\"node\"}) or up{job=~\"blikvm.*\"}",
      "instant": true,
      "refId": "A",
-     "legendFormat": "{{instance}}"
+     "format": "table"
     }
    ],
-   "fieldConfig": {
-    "defaults": {
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "green",
-        "value": 1
-       }
-      ]
-     },
-     "color": {
-      "mode": "thresholds"
-     }
-    },
-    "overrides": []
-   },
    "options": {
-    "colorMode": "background",
-    "graphMode": "none",
-    "justifyMode": "auto",
-    "orientation": "auto",
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "showPercentChange": false,
-    "textMode": "value_and_name",
-    "wideLayout": true
+    "content": "<style>\n*:has(> .dt-row){display:flex !important;flex-direction:row !important;flex-wrap:wrap !important;gap:4px !important;align-items:stretch !important}\n.dt-row{box-sizing:border-box;flex:1 1 150px;min-width:148px;max-width:300px;border-radius:6px;padding:8px;min-height:68px}\n.dt-row:has(> .c.ok){background:#2f9e44}\n.dt-row:has(> .c.bad){background:#c92a2a}\n.nm{font-size:15px;font-weight:600;color:#fff;line-height:1.3;margin-bottom:8px;word-break:break-word}\n.st{font-size:20px;font-weight:700;color:#fff}\n</style>\n<div class=\"c {{#if Value}}ok{{else}}bad{{/if}}\">\n<div class=\"nm\">{{club}}{{location_type}}{{kvm}} {{instance}}{{#if nodename}} &middot; {{nodename}}{{/if}}</div>\n<div class=\"st\">{{#if Value}}&#9679; ONLINE{{else}}&#9760; OFFLINE{{/if}}</div>\n</div>",
+    "everyRow": true,
+    "defaultContent": "нет данных"
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
    }
   },
   {
@@ -120,7 +91,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 6
+    "y": 5
    },
    "targets": [
     {
@@ -136,17 +107,6 @@
      "max": 100
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -161,7 +121,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 6
+    "y": 5
    },
    "targets": [
     {
@@ -177,17 +137,6 @@
      "max": 100
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -202,7 +151,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 14
+    "y": 13
    },
    "targets": [
     {
@@ -218,17 +167,6 @@
      "max": 100
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -243,7 +181,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 14
+    "y": 13
    },
    "targets": [
     {
@@ -257,17 +195,6 @@
      "unit": "Bps"
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -282,7 +209,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 22
+    "y": 21
    },
    "targets": [
     {
@@ -296,17 +223,6 @@
      "unit": "Bps"
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -321,7 +237,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 22
+    "y": 21
    },
    "targets": [
     {
@@ -335,17 +251,6 @@
      "unit": "Bps"
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -360,7 +265,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 30
+    "y": 29
    },
    "targets": [
     {
@@ -376,17 +281,6 @@
      "max": 80
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
@@ -401,7 +295,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 30
+    "y": 29
    },
    "targets": [
     {
@@ -415,21 +309,10 @@
      "unit": "bytes"
     },
     "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
    }
   },
   {
-   "id": 11,
+   "id": 10,
    "type": "stat",
    "title": "BliKVM: Статус",
    "datasource": {
@@ -440,7 +323,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 38
+    "y": 37
    },
    "targets": [
     {
@@ -481,6 +364,212 @@
      "values": false
     },
     "textMode": "value_and_name"
+   }
+  },
+  {
+   "id": 11,
+   "type": "stat",
+   "title": "SSD/NVMe: статус SMART",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 6,
+    "w": 8,
+    "x": 0,
+    "y": 45
+   },
+   "targets": [
+    {
+     "expr": "smartctl_device_smart_status",
+     "instant": true,
+     "refId": "A",
+     "legendFormat": "{{instance}} {{device}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   }
+  },
+  {
+   "id": 12,
+   "type": "timeseries",
+   "title": "SSD/NVMe: температура, °C",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 8,
+    "y": 45
+   },
+   "targets": [
+    {
+     "expr": "smartctl_device_temperature{temperature_type=\"current\"}",
+     "refId": "A",
+     "legendFormat": "{{instance}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "min": 0,
+     "max": 80
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 13,
+   "type": "timeseries",
+   "title": "NVMe: износ, %",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 16,
+    "y": 45
+   },
+   "targets": [
+    {
+     "expr": "smartctl_device_percentage_used",
+     "refId": "A",
+     "legendFormat": "{{instance}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 14,
+   "type": "table",
+   "title": "Службы failed (1С/СКУД/прочие) — пусто = все службы живы",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 6,
+    "w": 24,
+    "x": 0,
+    "y": 51
+   },
+   "targets": [
+    {
+     "expr": "node_systemd_unit_state{name!=\"\",state=\"failed\"} == 1",
+     "instant": true,
+     "refId": "A",
+     "format": "table"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "showHeader": true
+   }
+  },
+  {
+   "id": 15,
+   "type": "table",
+   "title": "🔐 Подбор паролей SSH (24ч) — пусто = тихо",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 0,
+    "y": 57
+   },
+   "targets": [
+    {
+     "expr": "sum by (instance, ip, user) (increase(ssh_failed_logins_total[24h])) > 0",
+     "instant": true,
+     "refId": "A",
+     "format": "table"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "showHeader": true
+   }
+  },
+  {
+   "id": 16,
+   "type": "table",
+   "title": "🔐 SSH входы (24ч) — кто и откуда заходил",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 57
+   },
+   "targets": [
+    {
+     "expr": "sum by (instance, user, ip) (increase(ssh_success_logins_total[24h])) > 0",
+     "instant": true,
+     "refId": "A",
+     "format": "table"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "showHeader": true
    }
   }
  ]

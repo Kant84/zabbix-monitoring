@@ -113,6 +113,17 @@ cp "$ROOT"/configs/grafana/dashboards/*.json /etc/grafana/dashboards/
 systemctl enable grafana-server
 systemctl restart grafana-server
 
+# Dynamic Text (панель статуса дашборда) — неподписанный плагин + HTML без
+# санитизации: systemd-override с переменными окружения (надёжнее ini).
+mkdir -p /etc/systemd/system/grafana-server.service.d
+cat > /etc/systemd/system/grafana-server.service.d/dynamictext.conf <<'EOF'
+[Service]
+Environment=GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=marcusolsson-dynamictext-panel
+Environment=GF_PANELS_DISABLE_SANITIZE_HTML=true
+EOF
+systemctl daemon-reload
+systemctl restart grafana-server
+
 # --- 6. MAX webhook ------------------------------------------------------------
 echo "=== 6. MAX webhook ==="
 mkdir -p /opt/monitoring/webhook

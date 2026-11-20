@@ -113,7 +113,7 @@ groups:
           severity: info
         annotations:
           summary: "SSH вход: '{{ $labels.user }}' с {{ $labels.ip }} на {{ $labels.instance }}"
-          description: "Успешный вход по SSH."
+          description: "Вход: {{ $labels.user }} с {{ $labels.ip }}"
 
       - alert: SshRootLogin
         expr: sum by (instance, ip) (increase(ssh_success_logins_total{user="root"}[5m])) > 0

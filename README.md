@@ -293,6 +293,12 @@ sudo ./scripts/install-security.sh                 # локально
 sudo ./scripts/install-security.sh --push --user nfc --targets "192.168.88.43:mobile ..."
 ```
 
+Парсер — `scripts/auth-metrics.py` (Python): читает `/var/log/auth.log` инкрементально,
+при его отсутствии — journald (`_COMM=sshd`, полный пересчёт). Файл метрик:
+`/var/lib/prometheus/node-exporter/auth.prom`, состояние — `.auth_state.json`.
+У node_exporter РОВНО одна строка `ARGS="--collector.textfile.directory=/var/lib/prometheus/node-exporter"`
+(скрипт выставляет сам; systemd-коллектор в новых версиях включён по умолчанию).
+
 | Алерт | Когда | Текст |
 |---|---|---|
 | SshBruteForce | >10 неудачных с ЧУЖОГО IP за 10 мин | IP + подбираемый логин + сервер |
@@ -361,6 +367,8 @@ journalctl -u prometheus -u grafana-server --since "-10min" --no-pager
 | Проброс на роутере клуба сделан, но порты закрыты | внешний и внутренний порт различаются или адрес не тот | порты должны совпадать: 9100→IP:9100, 10050→IP:10050; внутренний IP = адрес сервера в LAN клуба |
 | VIP (.50) «не виден» в роутере (DHCP leases/ARP) | VIP keepalived — статика, не DHCP-клиент; в ARP роутера попадает только при транзитном трафике | норма. Проверка: `/ping 192.168.88.50` с Mikrotik. Для WG-доступа пиру хватает AllowedIPs …, 192.168.88.0/24 |
 | `found multiple scrape configs with job name` | Два job с одинаковым именем запрещены | Дать уникальные имена (blikvm-42/44), алерты ловить `job=~"blikvm.*"` |
+| `node_textfile_scrape_error 1` / `ssh_` метрик нет | текстфайл вне каталога collector'а или битый формат (кавычки в метках) | каталог `--collector.textfile.directory=/var/lib/prometheus/node-exporter` (ровно одна строка ARGS!), валидный prom-формат, перезапуск node_exporter |
+| MAX: `401 No access token` / SSL error 60 к api2 | заголовок `Authorization: <сырой токен>` (БЕЗ "Bearer"); домен `platform-api2.max.ru` имеет кривую цепочку | используйте домен `platform-api.max.ru` и токен без префикса Bearer (как в scripts/club-report.sh) |
 | Мусорные 10.200.x.x в дашборде | Примерные филиалы в branches.conf (v4.1) | Очистить conf, удалить json, и **вычистить серии**: включить admin API (`ARGS="--web.enable-admin-api"` в `/etc/default/prometheus`, restart), затем `curl -X POST -g 'localhost:9090/api/v1/admin/tsdb/delete_series?match[]={instance=~"10.200.*"}'`, `curl -X POST localhost:9090/api/v1/admin/tsdb/clean_tombstones`, вернуть ARGS="", restart. Результат проверять ТОЛЬКО через `/api/v1/label/instance/values` (instant query уставшие серии не показывает!) |
 | `spb.json` с `"targets": [""]` | scanner-branches v4.1 при пустом результате | Исправлено в v4.2 (пустой результат → файл удаляется) |
 
