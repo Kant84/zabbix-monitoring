@@ -282,6 +282,25 @@ sudo ./scripts/install-addon.sh --push --user nfc --targets \
 - Алерты: SmartDeviceUnhealthy (SMART FAILED), SmartDeviceHot (>60°C),
   SystemdServiceFailed. Без ручного перечисления имён.
 
+### СКУД клубов (v4.3.0, scripts/skud-probe.py)
+
+Пробник живёт **на сервере клуба** (видит его LAN): HTTP-проверки веб-панелей
+(:8585, терминалы :9000) + служба itcservice -> textfile -> порт 9100.
+Новых пробросов на роутере клуба НЕ нужно. Конфиг `/etc/zabbix-monitor/skud.conf`:
+
+```
+service:itcservice
+http://127.0.0.1:8585|Веб СКУД (itcservice)
+http://192.168.50.28:9000/login|Вход левый (ITC X1)
+http://192.168.50.34:9000/login|Вход правый (ITC X1)
+http://192.168.50.32:9000/setup|Выход левый (Firefly)
+http://192.168.50.85:9000/setup|Выход правый (Firefly)
+```
+
+Установка на сервере клуба: `sudo install -m755 skud-probe.py /usr/local/bin/`,
+юниты `skud-probe.service/.timer` -> /etc/systemd/system, `systemctl enable --now skud-probe.timer`.
+Алерты: SkudServiceDown, SkudHttpDown — с именем клуба и устройства в MAX.
+
 ### Безопасность: наблюдение за SSH (v4.2.7, install-security.sh)
 
 **Только наблюдение и оповещения — без банов и блокировок.** Метрики идут по

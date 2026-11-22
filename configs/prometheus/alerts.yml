@@ -125,6 +125,25 @@ groups:
           description: "Вход под root — проверь, что это ты."
 
 
+      # === СКУД клубов (v4.3.0, scripts/skud-probe.py на сервере клуба) ===
+      - alert: SkudServiceDown
+        expr: skud_service_up == 0
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "СКУД: служба {{ $labels.name }} не работает на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
+          description: "systemd ActiveState != active"
+
+      - alert: SkudHttpDown
+        expr: skud_http_up == 0
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "СКУД недоступен: {{ $labels.name }} на {{ if $labels.club }}{{ $labels.club }} ({{ $labels.instance }}){{ else }}{{ $labels.instance }}{{ end }}"
+          description: "HTTP-проверка {{ $labels.url }} не проходит (код 000/5xx)"
+
       - alert: SystemdServiceFailed
         expr: node_systemd_unit_state{name!="",state="failed"} == 1
         for: 3m

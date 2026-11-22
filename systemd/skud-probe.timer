@@ -1,0 +1,10 @@
+[Unit]
+Description=SKUD probe every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=60s
+Unit=skud-probe.service
+
+[Install]
+WantedBy=timers.target

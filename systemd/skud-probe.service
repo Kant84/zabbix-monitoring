@@ -1,0 +1,6 @@
+[Unit]
+Description=SKUD probe (terminals HTTP + itcservice)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/skud-probe.py
