@@ -223,6 +223,7 @@ sudo ./install-agent.sh --push --server 192.168.88.36 --user nfc     --targets "
 | TCP 9633 | `<внутр.IP клуба>:9633` | smartctl_exporter: SMART дисков (SSD Health) |
 
 Один скрипт со стороны мониторинга: `sudo ./scripts/connect-club.sh --name club-<city> --ip <публичный IP>`
+(стадия 2 — установка на сервер клуба: `sudo bash club-bootstrap.sh --server <белый IP офиса> --name club-<city>-<short> --psk <PSK>` — ставит агент, SMART, SSH-наблюдение и СКУД-пробник одним запуском)
 (регистрирует хост, добавляет в сканер SMART и печатает команды для сервера клуба).
 
 Заодно сделай на роутере клуба **резервирование DHCP** для сервера (привязка
