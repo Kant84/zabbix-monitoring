@@ -42,6 +42,7 @@ bash /tmp/install-addon.sh --smart --systemd
 
 step "3/5 Наблюдение за SSH (входы/подбор/root, без банов)"
 wget -q "$BASE/install-security.sh" -O /tmp/install-security.sh
+wget -q "$BASE/auth-metrics.py" -O /tmp/auth-metrics.py   # парсер, который ищет install-security.sh рядом с собой
 bash /tmp/install-security.sh
 
 step "4/5 СКУД-пробник (itcservice + терминалы по HTTP)"
